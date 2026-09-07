@@ -22,15 +22,21 @@ export function Stats(): ReactElement {
       <h1 className="text-lg font-semibold text-slate-900">統計</h1>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-slate-700">ワーカー稼働率</h2>
-        <UtilizationChart stats={utilization.data ?? []} />
+        <div className="relative h-64">
+          <UtilizationChart stats={utilization.data ?? []} />
+        </div>
       </section>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-slate-700">処理時間分布</h2>
-        <DurationHistogram bins={duration.data ?? []} />
+        <div className="relative h-64">
+          <DurationHistogram bins={duration.data ?? []} />
+        </div>
       </section>
       <section>
         <h2 className="mb-2 text-sm font-semibold text-slate-700">エラー種別集計</h2>
-        <ErrorBreakdownChart items={errors.data ?? []} />
+        <div className="relative h-64">
+          <ErrorBreakdownChart items={errors.data ?? []} />
+        </div>
       </section>
     </div>
   );

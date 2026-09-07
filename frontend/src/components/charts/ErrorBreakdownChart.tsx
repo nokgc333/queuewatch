@@ -21,6 +21,7 @@ export function ErrorBreakdownChart({ items }: ErrorBreakdownChartProps): ReactE
       data={buildErrorBreakdownData(items)}
       options={{
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { title: { display: true, text: "エラー種別集計" } },
       }}
     />

@@ -21,6 +21,7 @@ export function DurationHistogram({ bins }: DurationHistogramProps): ReactElemen
       data={buildDurationHistogramData(bins)}
       options={{
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
           title: { display: true, text: "処理時間分布" },

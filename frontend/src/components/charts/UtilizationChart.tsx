@@ -21,6 +21,7 @@ export function UtilizationChart({ stats }: UtilizationChartProps): ReactElement
       data={buildUtilizationChartData(stats)}
       options={{
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false }, title: { display: true, text: "ワーカー稼働率" } },
         scales: { y: { beginAtZero: true, max: 100 } },
       }}
