@@ -1,0 +1,26 @@
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+strict = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# celery.task()デコレータはスタブがないためUntypedとなり、bind=Trueの
+# タスク関数はmypy的に検出不能。Celeryのデコレータの性質上の制約であり
+# アプリコード側の型安全性の欠如ではないため、このモジュールに限定して無効化する
+# (仕様書§13.3参照)。
+module = ["app.tasks"]
+disable_error_code = ["untyped-decorator"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=app --cov-report=term-missing"
+testpaths = ["tests"]
