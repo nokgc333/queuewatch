@@ -54,6 +54,27 @@ def test_create_job_returns_503_when_broker_unavailable(
     assert response.json()["title"] == "Queue service unavailable"
 
 
+def test_create_job_returns_503_on_celery_runtime_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """実機検証で確認: celery.backends.asynchronousは再接続上限到達時に
+    素のRuntimeErrorを送出する（redis-pyのConnectionErrorではラップされない
+    ケースがあるため、広めの例外集合で捕捉する必要がある）。
+    """
+
+    def _raise_runtime_error(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError(
+            "Retry limit exceeded while trying to reconnect to the Celery result store backend."
+        )
+
+    monkeypatch.setattr("app.routers.jobs.process_render_job.apply_async", _raise_runtime_error)
+
+    response = client.post("/jobs", json={"name": "SHOT041_render", "priority": "low"})
+
+    assert response.status_code == 503
+    assert response.json()["title"] == "Queue service unavailable"
+
+
 def test_list_jobs_returns_all_jobs(client: TestClient) -> None:
     client.post("/jobs", json={"name": "JOB_A", "priority": "high"})
     client.post("/jobs", json={"name": "JOB_B", "priority": "low"})

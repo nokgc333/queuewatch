@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
+from kombu.exceptions import KombuError
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,7 +15,15 @@ from app.models import Job
 from app.schemas import JobCreate, JobDetailOut, JobOut
 from app.tasks import process_render_job
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+# Redis/Celeryブローカー接続不可時に実際に送出されうる例外群。
+# redis-pyはConnectionError/RedisError系、kombu(Celeryのメッセージング抽象化層)は
+# KombuError系、さらにceleryのbackends.asynchronousは再接続上限到達時に
+# 素のRuntimeErrorを送出する（実機検証で確認、仕様書§2.7 ERR-BROKER-UNAVAILABLE）。
+BROKER_UNAVAILABLE_EXCEPTIONS = (ConnectionError, RedisError, KombuError, OSError, RuntimeError)
 
 
 @router.get("", response_model=list[JobOut])
@@ -45,7 +57,8 @@ def create_job(payload: JobCreate, db: Session = Depends(get_db)) -> Job:
     queue_name = resolve_queue_name(job.priority)
     try:
         process_render_job.apply_async(args=[job.id], queue=queue_name)
-    except ConnectionError as exc:
+    except BROKER_UNAVAILABLE_EXCEPTIONS as exc:
+        logger.error("failed to publish job %s to broker: %s", job.id, exc)
         raise HTTPException(status_code=503, detail="Queue service unavailable") from exc
 
     db.refresh(job)
