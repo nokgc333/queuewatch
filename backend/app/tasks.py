@@ -70,13 +70,11 @@ def process_render_job(self, job_id: int) -> None:  # type: ignore[no-untyped-de
         db.commit()
 
         # 疑似レンダリング処理: 正規分布で2〜15秒の処理時間をシミュレート
-        duration = max(
-            MIN_DURATION_SECONDS,
-            min(MAX_DURATION_SECONDS, random.gauss(DURATION_MEAN_SECONDS, DURATION_STDDEV_SECONDS)),
-        )
+        sampled = random.gauss(DURATION_MEAN_SECONDS, DURATION_STDDEV_SECONDS)  # nosec B311
+        duration = max(MIN_DURATION_SECONDS, min(MAX_DURATION_SECONDS, sampled))
         time.sleep(duration)
 
-        if random.random() < FAILURE_RATE:
+        if random.random() < FAILURE_RATE:  # nosec B311
             raise RuntimeError("Simulated render failure (license server timeout)")
 
         job.status = "success"
@@ -84,9 +82,8 @@ def process_render_job(self, job_id: int) -> None:  # type: ignore[no-untyped-de
         db.commit()
 
     except RuntimeError as exc:
-        # job is always bound here: RuntimeError is only raised after the
-        # `job is None` early-return above has already passed.
-        assert job is not None
+        if job is None:
+            raise
         job.retry_count += 1
         job.error_message = str(exc)
         attempt = RetryLog(
