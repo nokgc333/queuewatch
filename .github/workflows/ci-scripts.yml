@@ -1,0 +1,28 @@
+name: CI Scripts
+
+on:
+  push:
+    branches: [main]
+    paths: ['scripts/**', '.github/workflows/ci-scripts.yml']
+  pull_request:
+    paths: ['scripts/**', '.github/workflows/ci-scripts.yml']
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+      - run: python -m pip install --upgrade pip setuptools
+      - run: pip install -r scripts/requirements.txt pip-audit
+      - run: black --check scripts/
+      - run: isort --check scripts/
+      - run: flake8 --max-line-length=100 --extend-ignore=E203 scripts/
+      - run: mypy scripts/houdini_submit_job.py
+      - run: pytest scripts/tests/ -v
+      - run: pip-audit -r scripts/requirements.txt
