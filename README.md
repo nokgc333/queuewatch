@@ -2,7 +2,9 @@
 
 Celery + Redisで動く分散レンダーファーム風のジョブキュー監視ダッシュボード。優先度別キューイング・自動リトライ（指数バックオフ）・デッドレターキューを、実際に動くコードで証明するプロジェクトです。
 
-**重要な注意**: QueueWatchは**疑似レンダーファーム**です。実際のHoudini/Nukeレンダリングは一切行いません（[ADR-0002](docs/adr/0002-simulated-render-farm.md)）。`backend/app/tasks.py`の`process_render_job`は`time.sleep()`でジョブの複雑度に応じた処理時間をシミュレートし、一定確率（既定10%）で意図的に失敗させることで、分散タスクキューの核心である「キューイング → ワーカー処理 → リトライ → デッドレターキュー」という設計を再現性高く実演します。
+**疑似と実の両方で動きます**。既定は疑似レンダー(`time.sleep()` と確率的な失敗で、キューイング → ワーカー処理 → リトライ → デッドレターを再現性高く実演、[ADR-0002](docs/adr/0002-simulated-render-farm.md))。`RENDERER=blender` にすると、実際に Blender をコマンドラインで動かして、フレームを出力します([ADR-0007](docs/adr/0007-renderer-port-and-blender.md)、Blender 3.6.0 / 4.0.0 / 4.5.3 / 5.0.0 で実機検証済み、[記録](docs/verification/README.md))。CI は疑似で通ります。
+
+> **English summary.** QueueWatch is a render-farm style job queue with a monitoring dashboard: Celery + Redis with priority queues, exponential-backoff retries, an application-level dead-letter queue and idempotent tasks. A `Renderer` port runs either a simulated renderer (default) or real Blender (verified on 3.6.0 to 5.0.0 with scene-path sandboxing, an allow-listed child environment and timeouts). The dashboard can search, page, cancel, pause, resume and requeue jobs; the API has token auth with roles, rate limits, JSON logs, Prometheus metrics, optional OpenTelemetry traces and Alembic migrations. Redis is never published by the default Compose file; the dashboard is served by non-root nginx with a CSP. CI covers tests, Lighthouse (100/100/100/100), a bundle budget and a Docker Compose smoke test.
 
 ## 目的・背景
 
@@ -10,20 +12,35 @@ CGパイプライン開発では、レンダーファームのジョブキュー
 
 詳細な要件定義・設計判断は [docs/要件定義書.md](docs/要件定義書.md) / [docs/仕様書.md](docs/仕様書.md) / [docs/adr/](docs/adr/) を参照してください。
 
+## 画面
+
+| ダッシュボード | ジョブ詳細 |
+| --- | --- |
+| ![ダッシュボード](docs/images/dashboard.png) | ![ジョブ詳細](docs/images/job-detail.png) |
+
+| 統計 | デッドレター(再投入) |
+| --- | --- |
+| ![統計](docs/images/stats.png) | ![デッドレター](docs/images/dead-letter.png) |
+
 ## アーキテクチャ
 
-```
-Web Browser / Houdini Python Shell
-        │ HTTP (REST/JSON, ポーリング)
-        ▼
-FastAPI Backend (:8000) ──publish──▶ Redis (:6379, Broker + Result Backend)
-        │ CRUD/集計                          │ deliver
-        ▼                                    ▼
-   SQLite (queuewatch.db)  ◀──状態更新── Celery Worker (process_render_job)
+```mermaid
+flowchart LR
+    B[Browser<br/>React + Vite] -- REST / ポーリング --> A
+    H[Houdini / frame-slicer<br/>submit script] -- REST --> A
+    A[FastAPI<br/>認証・レート制限<br/>JSON ログ・/metrics] -- publish --> R[(Redis<br/>パスワードつき・内部のみ)]
+    A <--> D[(SQLite WAL<br/>Alembic)]
+    R -- deliver --> W[Celery worker]
+    W -- 状態・進捗 --> D
+    W --> RP{Renderer}
+    RP -- 既定 --> S[SimulatedRenderer]
+    RP -- RENDERER=blender --> BL[Blender -b<br/>許可ルート内の .blend]
+    A -. /metrics .-> P[Prometheus / Grafana]
+    A -. OTLP .-> T[OpenTelemetry]
 ```
 
-- **同期**: ジョブ登録（`POST /jobs`）と一覧・詳細・統計の取得はすべて同期API（DB読み書きのみ、即座に応答）
-- **非同期**: ジョブの実処理（疑似レンダリング）はCeleryワーカー上で非同期実行。フロントエンドは3秒間隔のポーリングで結果を確認（WebSocketは不採用、[ADR-0005](docs/adr/0005-polling-over-websocket.md)）
+- **同期**: ジョブ登録(`POST /jobs`)・操作・一覧・統計は同期 API(DB の読み書きのみ)
+- **非同期**: 実処理はワーカー。画面は 3 秒間隔のポーリング(WebSocket は不採用、[ADR-0005](docs/adr/0005-polling-over-websocket.md))
 
 この「登録は同期・高速」「実処理は非同期・低速」という分離が設計の核です。
 
@@ -33,8 +50,9 @@ FastAPI Backend (:8000) ──publish──▶ Redis (:6379, Broker + Result Bac
 queuewatch/
 ├── frontend/   React 19 + Vite + TypeScript + Tailwind CSS v4（ジョブボード・統計ダッシュボード）
 ├── backend/    FastAPI + Celery + SQLAlchemy + SQLite（REST API + 分散タスクキュー）
-├── scripts/    houdini_submit_job.py（HoudiniからのFR-007連携）
-└── docs/       要件定義書・仕様書・ADR
+├── scripts/    houdini_submit_job.py / verify_blender_render.py / make_sample_scene.py
+├── ops/        Prometheus の設定・Grafana のダッシュボードの例
+└── docs/       要件定義書・仕様書・ADR・運用手順書・API一覧・実機検証の記録
 ```
 
 ## 技術スタック
@@ -42,7 +60,7 @@ queuewatch/
 - **backend**: FastAPI / Celery / Redis / SQLAlchemy 2.0 / Pydantic v2 / pytest / mypy(strict)
 - **frontend**: React 19 / Vite / TypeScript(strict) / Tailwind CSS v4 / Chart.js(react-chartjs-2) / Vitest + Testing Library
 - **scripts**: requests のみ（hou非依存、どのPython環境からでも実行可能）
-- **infra**: Docker Compose（Redis / backend / worker / frontend）
+- **infra**: Docker Compose（Redis / backend / worker / frontend=nginx）、Alembic、Prometheus / OpenTelemetry（任意）
 
 ## インストール・起動（ローカル）
 
@@ -54,6 +72,7 @@ redis-server --port 6379
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+python -m app.migrate        # スキーマを最新にする（Alembic）
 python -m app.seed           # デモデータ投入
 uvicorn app.main:app --reload --port 8000
 
@@ -72,8 +91,11 @@ npm run dev
 ### Docker Composeで起動する場合
 
 ```bash
+cp .env.example .env      # 必要なら編集（全設定の見本）
 docker compose up --build
 ```
+
+ダッシュボードは `http://localhost:8080`、APIは `http://localhost:8000`（どちらも `127.0.0.1` のみ）。Redisはホストに公開しません。起動・障害対応・キューの滞留時の対処・バックアップは [docs/operations.md](docs/operations.md)。
 
 ### Houdiniからジョブを投入する
 
@@ -89,16 +111,20 @@ submit_job("http://localhost:8000", "SHOT010_render", "high")
 ## テスト
 
 ```bash
-# バックエンド（57テスト、カバレッジ98%）
+# バックエンド（255テスト、CI は疑似レンダー）
 cd backend && CELERY_TASK_ALWAYS_EAGER=true pytest --cov=app --cov-report=term-missing
 
-# フロントエンド（77テスト、カバレッジ99%）
-cd frontend && npx vitest run --coverage
-npx tsc --noEmit
+# フロントエンド（128テスト）
+cd frontend && npx vitest run --coverage && npx tsc --noEmit
 
-# Houdini連携スクリプト（7テスト、hou非依存）
+# Houdini連携スクリプト（hou非依存）
 cd scripts && pytest tests/ -v
+
+# 実 Blender での投入→実行→出力（手動。Blender が要る）
+BLENDER_APP=/Applications/Blender.app python scripts/verify_blender_render.py
 ```
+
+CI: バックエンド・フロントエンド・スクリプトのテストと lint、`pip-audit`、Lighthouse（性能 85 以上、アクセシビリティ・SEO 100）、初期 JS の予算（68 kB gzip 以下）、Docker Compose のスモークテスト（Redis が公開されない・パスワードなしで拒否・CSP・JSON ログ・メトリクス・非 root）。
 
 ### Lint
 
@@ -124,16 +150,40 @@ Celery統合テストは`CELERY_TASK_ALWAYS_EAGER=true`環境変数によりワ�
 - **アプリケーションレベルDLQ**（仕様書§10.4）: RedisブローカーがブローカーレベルのDLQ機構を十分サポートしないため、`jobs.status="dead"`というDBフィールドを正としたシンプルな実装にした
 - **冪等性ガード**（仕様書§10.5）: `task_acks_late=True`によるat-least-once配信でワーカークラッシュ時にタスクが再配信されても、`status="success"`チェックで二重処理を防止
 
-## 既知の制限事項（Not in scope, v1）
+## ドキュメント
 
-- **実レンダリングとの統合なし**: 前述の通り疑似シミュレーションのみ。ファイル入出力・GPU/CPUリソース管理・ライセンスサーバー連携の実装経験は示せない
+| 文書 | 内容 |
+| --- | --- |
+| [docs/operations.md](docs/operations.md) | 起動・状態の確認・障害対応・キューの滞留・シャットダウン・バックアップ・復旧 |
+| [docs/api.md](docs/api.md) | API一覧（実際のAPIから生成し、テストで一致を保証） |
+| [docs/verification/](docs/verification/README.md) | 実 Blender の検証記録（版ごと） |
+| [CHANGELOG.md](CHANGELOG.md) | 変更履歴（0.2.0） |
+
+## 設計判断(ADR)
+
+| 番号 | 内容 |
+| --- | --- |
+| [0001](docs/adr/0001-celery-and-redis.md) | ADR-0001: Celery + Redisを分散タスクキュー基盤として採用 |
+| [0002](docs/adr/0002-simulated-render-farm.md) | ADR-0002: 疑似レンダーファーム（実レンダリングを行わないシミュレーション処理）の採用 |
+| [0003](docs/adr/0003-sqlite-as-primary-db.md) | ADR-0003: SQLiteをv1の正本DBとして採用（ジョブメタデータ・統計集計を含む） |
+| [0004](docs/adr/0004-fixed-priority-queues.md) | ADR-0004: 優先度キューを3段階固定とし動的変更は非対応とする設計判断 |
+| [0005](docs/adr/0005-polling-over-websocket.md) | ADR-0005: WebSocketではなくポーリングによる疑似リアルタイム表示を採用 |
+| [0006](docs/adr/0006-vite-over-nextjs.md) | ADR-0006: フロントエンドにNext.jsではなくViteを採用（SSR不要な管理画面用途） |
+| [0007](docs/adr/0007-renderer-port-and-blender.md) | ADR-0007: レンダラーをポートにして、疑似と実 Blender を切り替える(ADR-0002 を置き換える) |
+| [0008](docs/adr/0008-token-auth-and-safe-container-defaults.md) | ADR-0008: トークン認証と、安全な既定のコンテナ構成 |
+| [0009](docs/adr/0009-observability.md) | ADR-0009: 観測性は、JSON ログ・Prometheus・OpenTelemetry で揃える |
+| [0010](docs/adr/0010-job-controls.md) | ADR-0010: ジョブの操作(キャンセル・一時停止・再開・再投入) |
+
+## 既知の制限事項
+
 - **真の優先度スケジューリングの非保証**: 複数ワーカープロセスが並行して異なるキューを消費する場合、グローバルな優先順序は保証されない（[ADR-0004](docs/adr/0004-fixed-priority-queues.md)）
-- **手動再投入UIなし**: SCR-004（デッドレターキュービュー）はdeadジョブの一覧表示のみで、再投入は「同名で再度POSTしてください」という運用ガイド表示に留まる（Could優先度FR-010はv1スコープ外）
-- **ページネーション未実装**: `GET /jobs`は現状全件返却。`JobListParams`にlimit/offsetの型のみ先行して用意している
-- **認証なし**: 全APIエンドポイントが認証不要（要件定義書§5.2の判断）
-- **Redis接続不可時の孤立レコード**: `POST /jobs`のDB INSERTには成功しCeleryへのpublishに失敗した場合、DB上に`status="pending"`のまま進行しないレコードが残りうる。ワーカー再起動でも自動的には再配信されない（v1の許容リスク）
-- **Celery eagerモードでのテストの限界**: `apply()`は実ワーカーの複数回再配信を自動シミュレートしないため、`backend/tests/test_tasks.py`ではdead到達までの複数回試行を手動ループで模擬している。実際の指数バックオフ間隔の実測は手動確認（実ワーカーログのタイムスタンプ）に依存し、CI化していない
-- **実機検証・負荷テストは未実施**: Houdini実機での`houdini_submit_job.py`動作確認、ジョブ数増加時のSQLite書き込み遅延の実測は本README執筆時点で行っていない（捏造しない方針）
+- **実行中のジョブは止められない**: キャンセル・一時停止は、待機・リトライ中のジョブだけ（[ADR-0010](docs/adr/0010-job-controls.md)）
+- **実レンダーはBlenderのみ**: OpenCue・Deadline は、同じ `Renderer` ポートの実装として足せる設計だが、未実装（[ADR-0007](docs/adr/0007-renderer-port-and-blender.md)）。進捗はフレーム単位
+- **frame-slicer のジョブは、そのままでは実レンダーにならない**: ジョブに `scene` とフレーム範囲が要る（frame-slicer 側の対応待ち、[記録](docs/verification/README.md)）
+- **Redis接続不可時の孤立レコード**: `POST /jobs`のDB INSERTに成功しpublishに失敗すると、`pending`のまま残りうる（[運用手順書](docs/operations.md)に対処）
+- **Celery eagerモードでのテストの限界**: `apply()`は実ワーカーの複数回再配信を自動シミュレートしないため、dead到達までは手動ループで模擬している。実際のバックオフ間隔はワーカーのログで確認する
+- **負荷テストは未実施**: ジョブ数増加時のSQLite書き込み遅延の実測はしていない
+- **レート制限はプロセス内**: 複数台では合算されない（[ADR-0008](docs/adr/0008-token-auth-and-safe-container-defaults.md)）
 
 ## ライセンス
 
