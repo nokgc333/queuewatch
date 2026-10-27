@@ -28,7 +28,8 @@ jobs:
             echo "Redis answered without a password"; exit 1
           fi
       - name: The dashboard is served by nginx with a CSP
-        run: curl --fail --silent --head http://127.0.0.1:8080/ | grep -i "content-security-policy: default-src 'self'"
+        run: |
+          curl --fail --silent --head http://127.0.0.1:8080/ | grep -i "content-security-policy: default-src 'self'"
       - name: A job can be submitted and is stored
         run: |
           curl --fail --silent -X POST http://127.0.0.1:8000/jobs \
