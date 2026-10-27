@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+MAX_FRAME = 100_000
+MAX_FRAMES_PER_JOB = 10_000
 
 
 class JobCreate(BaseModel):
@@ -12,6 +15,17 @@ class JobCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     priority: str = Field(default="normal", pattern="^(high|normal|low)$")
+    scene: str | None = Field(default=None, min_length=1, max_length=255)
+    frame_start: int = Field(default=1, ge=1, le=MAX_FRAME)
+    frame_end: int = Field(default=1, ge=1, le=MAX_FRAME)
+
+    @model_validator(mode="after")
+    def _check_range(self) -> "JobCreate":
+        if self.frame_end < self.frame_start:
+            raise ValueError("frame_end must be greater than or equal to frame_start")
+        if self.frame_end - self.frame_start + 1 > MAX_FRAMES_PER_JOB:
+            raise ValueError(f"a job can render at most {MAX_FRAMES_PER_JOB} frames")
+        return self
 
 
 class JobOut(BaseModel):
@@ -25,6 +39,11 @@ class JobOut(BaseModel):
     retry_count: int
     max_retries: int
     error_message: str | None
+    scene: str | None
+    frame_start: int
+    frame_end: int
+    progress: int
+    output_dir: str | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
     started_at: datetime.datetime | None

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from kombu.exceptions import KombuError
@@ -10,9 +11,11 @@ from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from app.auth import requires_admin, requires_editor, requires_viewer
+from app.config import settings
 from app.database import get_db
 from app.domain.priority_queue import resolve_queue_name
 from app.models import Job
+from app.renderers import SceneNotAllowedError, resolve_scene
 from app.schemas import JobCreate, JobDetailOut, JobOut
 from app.tasks import process_render_job
 
@@ -25,6 +28,18 @@ router = APIRouter()
 # KombuError系、さらにceleryのbackends.asynchronousは再接続上限到達時に
 # 素のRuntimeErrorを送出する（実機検証で確認、仕様書§2.7 ERR-BROKER-UNAVAILABLE）。
 BROKER_UNAVAILABLE_EXCEPTIONS = (ConnectionError, RedisError, KombuError, OSError, RuntimeError)
+
+
+def _check_scene(payload: JobCreate) -> None:
+    """実レンダラーのときは、投入の時点で、シーンが許可されていることを確かめる(422)。"""
+    if settings.RENDERER != "blender":
+        return
+    if payload.scene is None:
+        raise HTTPException(status_code=422, detail="scene is required when RENDERER=blender")
+    try:
+        resolve_scene(Path(settings.RENDER_SCENE_ROOT), payload.scene)
+    except SceneNotAllowedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[JobOut], dependencies=[requires_viewer])
@@ -50,7 +65,15 @@ def create_job(payload: JobCreate, db: Session = Depends(get_db)) -> Job:
     DB上には`status="pending"`のまま孤立したレコードが残る可能性があるが、
     これはv1が許容するリスクとして仕様書に明記済み。
     """
-    job = Job(name=payload.name, priority=payload.priority, status="pending")
+    _check_scene(payload)
+    job = Job(
+        name=payload.name,
+        priority=payload.priority,
+        status="pending",
+        scene=payload.scene,
+        frame_start=payload.frame_start,
+        frame_end=payload.frame_end,
+    )
     db.add(job)
     db.commit()
     db.refresh(job)

@@ -1,17 +1,14 @@
-"""process_render_jobタスク本体（仕様書§5.3, §10, ADR-0002参照）。
+"""process_render_jobタスク本体（仕様書§5.3, §10, ADR-0002, ADR-0007参照）。
 
-**重要な設計上の正直さ（ADR-0002）**: このタスクは実際のレンダリングを一切行わない。
-Houdini/Nuke等の実レンダリングエンジンとの統合は本プロジェクトのスコープ外であり、
-`time.sleep()`による処理時間のシミュレーションと、確率的な疑似失敗
-(`FAILURE_RATE`)によって、分散タスクキューのキューイング・ワーカー処理・
-リトライ・デッドレターキューという「本質的に検証したい設計」を再現している。
+レンダリングは `Renderer`(app/renderers.py)に任せる。既定は疑似レンダー(ADR-0002)で、
+`RENDERER=blender` にすると実 Blender を動かす(ADR-0007)。再試行・バックオフ・デッドレター・
+冪等性の骨格は、どちらでも同じ。
 """
 
 from __future__ import annotations
 
-import random
-import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from celery.utils.log import get_task_logger
 from sqlalchemy.orm import Session
@@ -19,6 +16,13 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
 from app.models import Job, RetryLog
+from app.renderers import (
+    BlenderRenderer,
+    Renderer,
+    RenderError,
+    RenderRequest,
+    SimulatedRenderer,
+)
 from app.worker import celery_app
 
 logger = get_task_logger(__name__)
@@ -35,9 +39,27 @@ DURATION_MEAN_SECONDS = 7.0
 DURATION_STDDEV_SECONDS = 3.0
 
 
+def get_renderer() -> Renderer:
+    """設定に応じたレンダラーを作る。疑似の定数は、テストが差し替えられるよう、呼び出し時に読む。"""
+    if settings.RENDERER == "blender":
+        return BlenderRenderer(
+            settings.BLENDER_PATH,
+            Path(settings.RENDER_SCENE_ROOT),
+            Path(settings.RENDER_OUTPUT_ROOT),
+            settings.RENDER_TIMEOUT_SECONDS,
+        )
+    return SimulatedRenderer(
+        failure_rate=FAILURE_RATE,
+        min_seconds=MIN_DURATION_SECONDS,
+        max_seconds=MAX_DURATION_SECONDS,
+        mean_seconds=DURATION_MEAN_SECONDS,
+        stddev_seconds=DURATION_STDDEV_SECONDS,
+    )
+
+
 @celery_app.task(
     bind=True,
-    autoretry_for=(RuntimeError,),
+    autoretry_for=(RenderError,),
     retry_backoff=True,  # 指数バックオフ（1s, 2s, 4s...）
     retry_backoff_max=60,  # バックオフ間隔の上限
     retry_jitter=True,  # サンダリングハード対策
@@ -69,19 +91,26 @@ def process_render_job(self, job_id: int) -> None:  # type: ignore[no-untyped-de
         job.celery_task_id = self.request.id
         db.commit()
 
-        # 疑似レンダリング処理: 正規分布で2〜15秒の処理時間をシミュレート
-        sampled = random.gauss(DURATION_MEAN_SECONDS, DURATION_STDDEV_SECONDS)  # nosec B311
-        duration = max(MIN_DURATION_SECONDS, min(MAX_DURATION_SECONDS, sampled))
-        time.sleep(duration)
+        def save_progress(value: int) -> None:
+            job.progress = value
+            db.commit()
 
-        if random.random() < FAILURE_RATE:  # nosec B311
-            raise RuntimeError("Simulated render failure (license server timeout)")
-
+        result = get_renderer().render(
+            RenderRequest(
+                job_id=job.id,
+                scene=job.scene,
+                frame_start=job.frame_start,
+                frame_end=job.frame_end,
+            ),
+            save_progress,
+        )
+        job.progress = 100
+        job.output_dir = result.output_dir
         job.status = "success"
         job.finished_at = datetime.now(timezone.utc)
         db.commit()
 
-    except RuntimeError as exc:
+    except RenderError as exc:
         if job is None:
             raise
         job.retry_count += 1
