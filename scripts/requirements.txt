@@ -4,6 +4,6 @@ requests>=2.32,<3
 pytest>=9.0.3
 black>=24.0
 isort>=5.13
-flake8>=7.1
+flake8>=7.4.1
 mypy>=1.11
 types-requests
