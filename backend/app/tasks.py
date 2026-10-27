@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.domain.job_actions import SKIPPED_BY_WORKERS
 from app.models import Job, RetryLog
 from app.renderers import (
     BlenderRenderer,
@@ -81,6 +82,9 @@ def process_render_job(self, job_id: int) -> None:  # type: ignore[no-untyped-de
         job = db.get(Job, job_id)
         if job is None:
             logger.warning("job %s not found, skipping", job_id)
+            return
+        if job.status in SKIPPED_BY_WORKERS:
+            logger.info("job %s is %s, skipping", job_id, job.status)
             return
         if job.status == "success":
             logger.info("job %s already succeeded, skipping duplicate execution", job_id)

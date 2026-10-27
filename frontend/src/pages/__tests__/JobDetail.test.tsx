@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { memoryLocation } from "wouter/memory-location";
+import { Route, Router } from "wouter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as apiClient from "@/lib/api-client";
@@ -12,11 +13,9 @@ afterEach(() => {
 
 function renderAt(jobId: number): ReturnType<typeof render> {
   return render(
-    <MemoryRouter initialEntries={[`/jobs/${jobId}`]}>
-      <Routes>
-        <Route path="/jobs/:id" element={<JobDetail />} />
-      </Routes>
-    </MemoryRouter>,
+    <Router hook={memoryLocation({ path: `/jobs/${jobId}` }).hook}>
+      <Route path="/jobs/:id" component={JobDetail} />
+    </Router>,
   );
 }
 

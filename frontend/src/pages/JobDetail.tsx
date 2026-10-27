@@ -1,7 +1,8 @@
 /** SCR-002: ジョブ詳細（リトライ履歴、仕様書§6.3）。 */
 import { useCallback, type ReactElement } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "wouter";
 
+import { JobActions } from "@/components/job-board/JobActions";
 import { PRIORITY_LABELS } from "@/domain/job/priority";
 import { STATUS_LABELS } from "@/domain/status/status";
 import { ApiError, getJob } from "@/lib/api-client";
@@ -13,14 +14,14 @@ export function JobDetail(): ReactElement {
   const jobId = Number(params.id);
 
   const fetchJob = useCallback(() => getJob(API_BASE_URL, jobId), [jobId]);
-  const { data: job, error, isLoading } = usePolling(fetchJob, POLLING_INTERVAL_MS);
+  const { data: job, error, isLoading, refresh } = usePolling(fetchJob, POLLING_INTERVAL_MS);
 
   if (error instanceof ApiError && error.status === 404) {
     return <p className="p-4 text-slate-600">ジョブが見つかりません（ID: {jobId}）。</p>;
   }
 
   if (isLoading && job === null) {
-    return <p className="p-4 text-slate-400">読み込み中...</p>;
+    return <p className="p-4 text-slate-600">読み込み中...</p>;
   }
 
   if (job === null) {
@@ -37,10 +38,24 @@ export function JobDetail(): ReactElement {
         <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
           優先度: {PRIORITY_LABELS[job.priority]}
         </span>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-600">
           {job.retry_count} / {job.max_retries}
         </span>
       </header>
+
+      <JobActions job={job} onDone={refresh} />
+
+      {job.progress !== undefined && job.status !== "pending" && (
+        <div>
+          <progress
+            value={job.progress}
+            max={100}
+            aria-label="レンダリングの進捗"
+            className="h-2 w-64"
+          />
+          <span className="ml-2 text-xs text-slate-600">{job.progress}%</span>
+        </div>
+      )}
 
       {job.status === "dead" && (
         <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">

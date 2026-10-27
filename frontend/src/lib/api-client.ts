@@ -1,5 +1,6 @@
 /** バックエンドAPI(FastAPI)向けの薄いfetchラッパー（PipeBoardのapi-client.tsパターンを踏襲）。 */
 import { getApiToken } from "@/lib/config";
+import type { JobAction } from "@/domain/job/actions";
 import type { Job, Status } from "@/domain/status/status";
 import type { Priority } from "@/domain/job/priority";
 
@@ -82,14 +83,46 @@ function jsonInit(method: string, body: unknown): RequestInit {
 export interface ListJobsFilter {
   status?: Status;
   priority?: Priority;
+  q?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export function listJobs(baseUrl: string, filter?: ListJobsFilter): Promise<Job[]> {
   const params = new URLSearchParams();
   if (filter?.status) params.set("status", filter.status);
   if (filter?.priority) params.set("priority", filter.priority);
+  if (filter?.q) params.set("q", filter.q);
+  if (filter?.limit !== undefined) params.set("limit", String(filter.limit));
+  if (filter?.offset !== undefined) params.set("offset", String(filter.offset));
   const query = params.toString();
   return request<Job[]>(`${baseUrl}/jobs${query ? `?${query}` : ""}`);
+}
+
+export interface JobsPage {
+  jobs: Job[];
+  /** 条件に合う総件数(ページに入りきらない分も含む)。 */
+  total: number;
+}
+
+export async function listJobsPage(baseUrl: string, filter?: ListJobsFilter): Promise<JobsPage> {
+  const params = new URLSearchParams();
+  if (filter?.status) params.set("status", filter.status);
+  if (filter?.priority) params.set("priority", filter.priority);
+  if (filter?.q) params.set("q", filter.q);
+  if (filter?.limit !== undefined) params.set("limit", String(filter.limit));
+  if (filter?.offset !== undefined) params.set("offset", String(filter.offset));
+  const query = params.toString();
+  const url = `${baseUrl}/jobs${query ? `?${query}` : ""}`;
+  const init = withAuthorization();
+  const response = init === undefined ? await fetch(url) : await fetch(url, init);
+  if (!response.ok) {
+    const problem = await response.json().catch(() => ({}));
+    throw new ApiError(response.status, problem.title ?? `Request failed: ${response.status}`);
+  }
+  const jobs = (await response.json()) as Job[];
+  const header = response.headers?.get("X-Total-Count");
+  return { jobs, total: header === null || header === undefined ? jobs.length : Number(header) };
 }
 
 export interface CreateJobPayload {
@@ -103,6 +136,10 @@ export function createJob(baseUrl: string, payload: CreateJobPayload): Promise<J
 
 export function getJob(baseUrl: string, jobId: number): Promise<JobDetailDto> {
   return request<JobDetailDto>(`${baseUrl}/jobs/${jobId}`);
+}
+
+export function controlJob(baseUrl: string, jobId: number, action: JobAction): Promise<Job> {
+  return request<Job>(`${baseUrl}/jobs/${jobId}/${action}`, { method: "POST" });
 }
 
 export async function deleteJob(baseUrl: string, jobId: number): Promise<void> {

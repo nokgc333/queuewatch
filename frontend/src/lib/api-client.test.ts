@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiError,
+  controlJob,
   createJob,
   deleteJob,
   getDurationStats,
@@ -11,6 +12,7 @@ import {
   getUtilizationStats,
   getWorkerStatus,
   listJobs,
+  listJobsPage,
 } from "./api-client";
 
 const BASE_URL = "http://localhost:8000";
@@ -206,5 +208,77 @@ describe("認証トークン", () => {
     mockFetchOnce(401, { title: "Authentication required" });
 
     await expect(listJobs(BASE_URL)).rejects.toMatchObject({ status: 401 });
+  });
+});
+
+describe("controlJob", () => {
+  it("POST /jobs/:id/:action を呼ぶ", async () => {
+    mockFetchOnce(200, { id: 3, status: "cancelled" });
+
+    const job = await controlJob(BASE_URL, 3, "cancel");
+
+    expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/jobs/3/cancel`, { method: "POST" });
+    expect(job).toMatchObject({ status: "cancelled" });
+  });
+
+  it("409 のときは、サーバーの理由つきのエラーにする", async () => {
+    mockFetchOnce(409, { title: "Cannot cancel a job that is running" });
+
+    await expect(controlJob(BASE_URL, 3, "cancel")).rejects.toMatchObject({
+      status: 409,
+      message: "Cannot cancel a job that is running",
+    });
+  });
+});
+
+describe("listJobs の検索とページング", () => {
+  it("q・limit・offset をクエリにする(0 の offset も送る)", async () => {
+    mockFetchOnce(200, []);
+
+    await listJobs(BASE_URL, { q: "SHOT", limit: 20, offset: 0 });
+
+    expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/jobs?q=SHOT&limit=20&offset=0`);
+  });
+
+  it("空の q は送らない", async () => {
+    mockFetchOnce(200, []);
+
+    await listJobs(BASE_URL, { q: "" });
+
+    expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/jobs`);
+  });
+});
+
+describe("listJobsPage", () => {
+  it("X-Total-Count を総件数として返す", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "X-Total-Count": "250" }),
+        json: async () => [{ id: 1 }],
+      }),
+    );
+
+    const page = await listJobsPage(BASE_URL, { limit: 1 });
+
+    expect(page).toEqual({ jobs: [{ id: 1 }], total: 250 });
+    expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/jobs?limit=1`);
+  });
+
+  it("ヘッダが無いときは、受け取った件数を総件数にする", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => [{ id: 1 }, { id: 2 }] }),
+    );
+
+    expect((await listJobsPage(BASE_URL)).total).toBe(2);
+  });
+
+  it("失敗は、サーバーの理由つきのエラーにする", async () => {
+    mockFetchOnce(401, { title: "Authentication required" });
+
+    await expect(listJobsPage(BASE_URL)).rejects.toMatchObject({ status: 401 });
   });
 });

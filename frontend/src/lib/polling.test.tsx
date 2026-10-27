@@ -99,3 +99,59 @@ describe("usePolling", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("usePolling の取り直し", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("refreshKey が変わると、すぐに取り直す", async () => {
+    const fetcher = vi.fn().mockResolvedValue("x");
+    const { rerender } = renderHook(({ key }) => usePolling(fetcher, 3000, key), {
+      initialProps: { key: "a" },
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    rerender({ key: "b" });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("同じ refreshKey の再描画では、取り直さない", async () => {
+    const fetcher = vi.fn().mockResolvedValue("x");
+    const { rerender } = renderHook(({ key }) => usePolling(fetcher, 3000, key), {
+      initialProps: { key: "a" },
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    rerender({ key: "a" });
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("refresh() を呼ぶと、すぐに取り直す", async () => {
+    const fetcher = vi.fn().mockResolvedValue("x");
+    const { result } = renderHook(() => usePolling(fetcher, 3000));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      result.current.refresh();
+      await Promise.resolve();
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});

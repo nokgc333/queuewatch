@@ -3,6 +3,8 @@
  * (PipeBoardのdomain/status/status.tsパターンを踏襲、仕様書§6.2, §7.3)。
  *
  * 状態遷移: pending -> running -> (success | retrying -> running -> ... -> dead)
+ * 操作: pending / retrying は paused(一時停止)・cancelled(キャンセル)にでき、
+ *       dead / cancelled は pending へ再投入できる(バックエンドの domain/job_actions.py と対)。
  */
 
 export const STATUS_ORDER = [
@@ -11,6 +13,8 @@ export const STATUS_ORDER = [
   "retrying",
   "success",
   "dead",
+  "paused",
+  "cancelled",
 ] as const;
 
 export type Status = (typeof STATUS_ORDER)[number];
@@ -21,6 +25,8 @@ export const STATUS_LABELS: Record<Status, string> = {
   retrying: "リトライ中",
   success: "成功",
   dead: "デッドレター",
+  paused: "一時停止",
+  cancelled: "キャンセル",
 };
 
 export function isValidStatus(value: string): value is Status {
@@ -46,6 +52,8 @@ export interface Job {
   retry_count: number;
   max_retries: number;
   error_message?: string | null;
+  progress?: number;
+  scene?: string | null;
   created_at?: string;
   updated_at?: string;
   started_at?: string | null;
@@ -61,6 +69,8 @@ export function groupJobsByStatus(jobs: Job[]): GroupedJobs {
     retrying: [],
     success: [],
     dead: [],
+    paused: [],
+    cancelled: [],
   };
 
   for (const job of jobs) {

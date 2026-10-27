@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as apiClient from "@/lib/api-client";
@@ -25,9 +24,7 @@ describe("DeadLetterQueue", () => {
     ]);
 
     render(
-      <MemoryRouter>
-        <DeadLetterQueue />
-      </MemoryRouter>,
+      <DeadLetterQueue />,
     );
 
     expect(await screen.findByText("SHOT099_render")).toBeInTheDocument();
@@ -39,11 +36,29 @@ describe("DeadLetterQueue", () => {
     vi.spyOn(apiClient, "listJobs").mockResolvedValue([]);
 
     render(
-      <MemoryRouter>
-        <DeadLetterQueue />
-      </MemoryRouter>,
+      <DeadLetterQueue />,
     );
 
-    expect(await screen.findByText(/再度POST \/jobsしてください/)).toBeInTheDocument();
+    expect(await screen.findByText(/「再投入」で、リトライ回数を 0 に戻して/)).toBeInTheDocument();
+  });
+
+  it("デッドレターのジョブごとに、再投入のボタンを出す", async () => {
+    vi.spyOn(apiClient, "listJobs").mockResolvedValue([
+      {
+        id: 9,
+        name: "SHOT090_render",
+        priority: "normal",
+        status: "dead",
+        retry_count: 3,
+        max_retries: 3,
+        error_message: "boom",
+      },
+    ]);
+
+    render(
+      <DeadLetterQueue />,
+    );
+
+    expect(await screen.findByRole("button", { name: "再投入" })).toBeInTheDocument();
   });
 });
