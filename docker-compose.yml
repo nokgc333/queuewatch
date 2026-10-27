@@ -1,10 +1,11 @@
 services:
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-queuewatch-local-redis}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -13,26 +14,31 @@ services:
     build:
       context: ./backend
     ports:
-      - "8000:8000"
-    environment:
+      - "127.0.0.1:8000:8000"
+    environment: &backend-env
       DATABASE_URL: sqlite:////app/data/queuewatch.db
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
-      CORS_ALLOW_ORIGINS: "*"
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-queuewatch-local-redis}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-queuewatch-local-redis}@redis:6379/0
+      QUEUEWATCH_AUTH_MODE: ${QUEUEWATCH_AUTH_MODE:-local}
+      QUEUEWATCH_API_TOKENS: ${QUEUEWATCH_API_TOKENS:-}
+      QUEUEWATCH_CORS_ORIGINS: ${QUEUEWATCH_CORS_ORIGINS:-http://localhost:8080}
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - backend-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   worker:
     build:
       context: ./backend
-    environment:
-      DATABASE_URL: sqlite:////app/data/queuewatch.db
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    environment: *backend-env
     depends_on:
       redis:
         condition: service_healthy
@@ -47,12 +53,16 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_API_TOKEN: ${VITE_API_TOKEN:-}
     ports:
-      - "5173:5173"
+      - "127.0.0.1:8080:8080"
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      API_ORIGIN: ${VITE_API_BASE_URL:-http://localhost:8000}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   backend-data:
