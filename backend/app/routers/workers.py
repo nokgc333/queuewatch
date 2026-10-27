@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth import requires_viewer
 from app.database import get_db
 from app.domain.stats import calculate_utilization
 from app.models import WorkerStat
@@ -15,7 +16,7 @@ from app.schemas import WorkerStatusOut
 router = APIRouter()
 
 
-@router.get("/status", response_model=list[WorkerStatusOut])
+@router.get("/status", response_model=list[WorkerStatusOut], dependencies=[requires_viewer])
 def get_worker_status(db: Session = Depends(get_db)) -> list[WorkerStatusOut]:
     """ワーカーごとの直近ウィンドウの稼働率・処理件数を返す（FR-003）。
 

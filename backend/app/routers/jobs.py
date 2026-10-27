@@ -9,6 +9,7 @@ from kombu.exceptions import KombuError
 from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
+from app.auth import requires_admin, requires_editor, requires_viewer
 from app.database import get_db
 from app.domain.priority_queue import resolve_queue_name
 from app.models import Job
@@ -26,7 +27,7 @@ router = APIRouter()
 BROKER_UNAVAILABLE_EXCEPTIONS = (ConnectionError, RedisError, KombuError, OSError, RuntimeError)
 
 
-@router.get("", response_model=list[JobOut])
+@router.get("", response_model=list[JobOut], dependencies=[requires_viewer])
 def list_jobs(
     status: str | None = None,
     priority: str | None = None,
@@ -41,7 +42,7 @@ def list_jobs(
     return query.order_by(Job.created_at.desc()).all()
 
 
-@router.post("", response_model=JobOut, status_code=201)
+@router.post("", response_model=JobOut, status_code=201, dependencies=[requires_editor])
 def create_job(payload: JobCreate, db: Session = Depends(get_db)) -> Job:
     """ジョブを登録し、優先度に応じたキューへpublishする（FR-001/006）。
 
@@ -65,7 +66,7 @@ def create_job(payload: JobCreate, db: Session = Depends(get_db)) -> Job:
     return job
 
 
-@router.get("/{job_id}", response_model=JobDetailOut)
+@router.get("/{job_id}", response_model=JobDetailOut, dependencies=[requires_viewer])
 def get_job(job_id: int, db: Session = Depends(get_db)) -> Job:
     job = db.get(Job, job_id)
     if job is None:
@@ -73,7 +74,7 @@ def get_job(job_id: int, db: Session = Depends(get_db)) -> Job:
     return job
 
 
-@router.delete("/{job_id}", status_code=204)
+@router.delete("/{job_id}", status_code=204, dependencies=[requires_admin])
 def delete_job(job_id: int, db: Session = Depends(get_db)) -> None:
     """ジョブを削除する（retry_logsもカスケード削除、仕様書§4.4）。"""
     job = db.get(Job, job_id)

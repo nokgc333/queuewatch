@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth import requires_viewer
 from app.database import get_db
 from app.domain.stats import calculate_duration_histogram, calculate_utilization
 from app.models import Job, RetryLog, WorkerStat
@@ -16,7 +17,7 @@ from app.schemas import DurationBinOut, ErrorBreakdownItemOut, UtilizationStatOu
 router = APIRouter()
 
 
-@router.get("/utilization", response_model=list[UtilizationStatOut])
+@router.get("/utilization", response_model=list[UtilizationStatOut], dependencies=[requires_viewer])
 def get_utilization_stats(db: Session = Depends(get_db)) -> list[UtilizationStatOut]:
     """ワーカー稼働率統計（FR-008）。worker_name単位の最新ウィンドウを集計する。"""
     stats = db.query(WorkerStat).order_by(WorkerStat.window_start.desc()).all()
@@ -41,7 +42,7 @@ def get_utilization_stats(db: Session = Depends(get_db)) -> list[UtilizationStat
     return results
 
 
-@router.get("/duration", response_model=list[DurationBinOut])
+@router.get("/duration", response_model=list[DurationBinOut], dependencies=[requires_viewer])
 def get_duration_stats(db: Session = Depends(get_db)) -> list[DurationBinOut]:
     """処理時間分布統計（FR-008）。jobs.started_at〜finished_atからヒストグラムを生成する。"""
     jobs = db.query(Job).filter(Job.started_at.is_not(None), Job.finished_at.is_not(None)).all()
@@ -55,7 +56,7 @@ def get_duration_stats(db: Session = Depends(get_db)) -> list[DurationBinOut]:
     ]
 
 
-@router.get("/errors", response_model=list[ErrorBreakdownItemOut])
+@router.get("/errors", response_model=list[ErrorBreakdownItemOut], dependencies=[requires_viewer])
 def get_error_stats(db: Session = Depends(get_db)) -> list[ErrorBreakdownItemOut]:
     """エラー種別集計（FR-005）。retry_logs.error_messageを分類集計する。"""
     logs = (
