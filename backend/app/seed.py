@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import datetime
 
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal, engine
+from app.migrate import upgrade_to_head
 from app.models import Job, RetryLog, WorkerStat
 
 
@@ -19,7 +20,7 @@ def _utcnow() -> datetime.datetime:
 
 
 def seed() -> None:
-    Base.metadata.create_all(bind=engine)
+    upgrade_to_head(engine.url.render_as_string(hide_password=False))
     db = SessionLocal()
     try:
         now = _utcnow()

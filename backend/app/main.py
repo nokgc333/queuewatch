@@ -8,22 +8,23 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app import rate_limit
-from app.auth import load_auth_settings
+from app import metrics, rate_limit
+from app.auth import load_auth_settings, requires_viewer
 from app.body_limit import BodyLimitMiddleware
 from app.cors import load_allowed_origins
-from app.database import Base, engine
+from app.database import get_db
 from app.errors import problem_details_handler
 from app.logging_config import configure_logging
+from app.request_context import RequestContextMiddleware
 from app.routers import jobs, stats, workers
+from app.tracing import setup_tracing
 
 configure_logging()
-
-Base.metadata.create_all(bind=engine)
 
 
 @asynccontextmanager
@@ -36,7 +37,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="QueueWatch API",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
     dependencies=[Depends(rate_limit.enforce_rate_limit)],
 )
@@ -57,6 +58,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(BodyLimitMiddleware)
+app.add_middleware(RequestContextMiddleware)
+setup_tracing(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=load_allowed_origins(),
@@ -68,6 +71,12 @@ app.add_middleware(
 app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 app.include_router(workers.router, prefix="/workers", tags=["workers"])
 app.include_router(stats.router, prefix="/stats", tags=["stats"])
+
+
+@app.get("/metrics", dependencies=[requires_viewer], include_in_schema=False)
+def prometheus_metrics(db: Session = Depends(get_db)) -> Response:
+    """Prometheus のスクレイプ用(ジョブの件数は DB から、HTTP の件数はプロセス内から)。"""
+    return Response(content=metrics.render_metrics(db), media_type=metrics.CONTENT_TYPE)
 
 
 @app.get("/healthz")

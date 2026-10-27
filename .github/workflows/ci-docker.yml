@@ -17,6 +17,12 @@ jobs:
         run: docker compose up -d --build --wait --wait-timeout 240
       - name: The API is up and reaches Redis with its password
         run: curl --fail --silent http://127.0.0.1:8000/healthz | grep -q '"redis":"ok"'
+      - name: Metrics are exposed in the Prometheus format
+        run: curl --fail --silent http://127.0.0.1:8000/metrics | grep -q "^queuewatch_jobs"
+      - name: The API logs are JSON lines with a request id
+        run: |
+          curl --fail --silent -H "X-Request-ID: smoke-0001" http://127.0.0.1:8000/jobs >/dev/null
+          docker compose logs --no-color backend | grep '"request_id": "smoke-0001"' | head -1 | python3 -c "import sys,json; json.loads(sys.stdin.read().split('|',1)[1])"
       - name: Redis is not published to the host
         run: |
           if docker compose ps redis --format '{{.Ports}}' | grep -q -- '->'; then
@@ -27,6 +33,9 @@ jobs:
           if docker compose exec -T redis redis-cli ping | grep -q PONG; then
             echo "Redis answered without a password"; exit 1
           fi
+      - name: The dashboard config is written from the environment at start
+        run: |
+          curl --fail --silent http://127.0.0.1:8080/config.js | grep -q 'apiBaseUrl: "http://localhost:8000"'
       - name: The dashboard is served by nginx with a CSP
         run: |
           curl --fail --silent --head http://127.0.0.1:8080/ | grep -i "content-security-policy: default-src 'self'"

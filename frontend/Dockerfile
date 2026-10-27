@@ -17,6 +17,7 @@ RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS production
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY --chmod=755 nginx/40-write-config.sh /docker-entrypoint.d/40-write-config.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1

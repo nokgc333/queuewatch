@@ -10,6 +10,11 @@ server {
     add_header Referrer-Policy "no-referrer" always;
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
+    location = /config.js {
+        alias /tmp/config.js;
+        expires -1;
+    }
+
     location /assets/ {
         expires 1y;
         try_files $uri =404;
