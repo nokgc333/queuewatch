@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.domain.priority_queue import PRIORITY_QUEUE_MAP
 from app.models import Job
 
-JOB_STATUSES = ("pending", "running", "retrying", "success", "dead")
+JOB_STATUSES = ("pending", "running", "retrying", "success", "dead", "paused", "cancelled")
 UNMATCHED_ROUTE = "unmatched"
 CONTENT_TYPE = CONTENT_TYPE_LATEST
 

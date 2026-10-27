@@ -66,6 +66,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
     allow_credentials=False,
+    expose_headers=["X-Total-Count"],
 )
 
 app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
