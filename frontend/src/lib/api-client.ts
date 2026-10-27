@@ -1,4 +1,5 @@
 /** バックエンドAPI(FastAPI)向けの薄いfetchラッパー（PipeBoardのapi-client.tsパターンを踏襲）。 */
+import { getApiToken } from "@/lib/config";
 import type { Job, Status } from "@/domain/status/status";
 import type { Priority } from "@/domain/job/priority";
 
@@ -49,7 +50,7 @@ export interface ErrorBreakdownItemDto {
 }
 
 function withAuthorization(init?: RequestInit): RequestInit | undefined {
-  const token = import.meta.env.VITE_API_TOKEN;
+  const token = getApiToken();
   if (!token) return init;
   return {
     ...init,
