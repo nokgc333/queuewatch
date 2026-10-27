@@ -76,3 +76,55 @@ def test_locations_do_not_declare_headers_because_that_would_drop_the_security_h
     assert locations
     for block in locations:
         assert "add_header" not in block
+
+
+def test_the_versions_and_the_changelog_agree() -> None:
+    import json
+
+    from app.main import app
+
+    package = json.loads(_read("frontend/package.json"))
+
+    assert package["version"] == app.version
+    assert f"## [{app.version}]" in _read("CHANGELOG.md")
+
+
+def test_the_release_workflow_publishes_both_images_to_ghcr_from_a_tag() -> None:
+    release = _read(".github/workflows/release.yml")
+
+    assert 'tags: ["v*"]' in release
+    assert "ghcr.io" in release
+    assert "backend, frontend" in release
+    assert "packages: write" in release
+
+
+def test_the_worker_and_the_api_get_time_to_finish_before_they_are_stopped() -> None:
+    compose = _read("docker-compose.yml")
+
+    assert "stop_grace_period: 120s" in compose
+    assert "stop_grace_period: 30s" in compose
+    assert "--timeout-graceful-shutdown" in compose
+
+
+def test_the_worker_has_its_own_health_check_and_waits_for_the_migrated_api() -> None:
+    worker = _read("docker-compose.yml").split("  worker:")[1].split("  frontend:")[0]
+
+    assert "inspect ping" in worker
+    assert "service_healthy" in worker
+
+
+def test_node_is_pinned_and_updates_are_automated() -> None:
+    assert _read(".nvmrc").strip() == "22"
+    dependabot = _read(".github/dependabot.yml")
+    for ecosystem in ("pip", "npm", "docker", "github-actions"):
+        assert f"package-ecosystem: {ecosystem}" in dependabot
+
+
+def test_the_grafana_dashboard_is_valid_json_and_uses_the_exported_metrics() -> None:
+    import json
+
+    dashboard = json.loads(_read("ops/grafana/queuewatch-dashboard.json"))
+    expressions = " ".join(t["expr"] for p in dashboard["panels"] for t in p["targets"])
+
+    for metric in ("queuewatch_jobs", "queuewatch_job_retries", "queuewatch_http_requests_total"):
+        assert metric in expressions
