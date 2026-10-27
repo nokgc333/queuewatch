@@ -1,0 +1,17 @@
+# 開発用の上書き: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up`
+# Redis をホストの 6379 に公開し、フロントを Vite の開発サーバーで動かす(本番の構成では公開しない)。
+services:
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  frontend:
+    build:
+      target: dev
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    volumes:
+      - ./frontend/src:/app/src

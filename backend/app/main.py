@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.config import settings
+from app import rate_limit
+from app.auth import load_auth_settings
+from app.body_limit import BodyLimitMiddleware
+from app.cors import load_allowed_origins
 from app.database import Base, engine
 from app.errors import problem_details_handler
 from app.logging_config import configure_logging
@@ -19,7 +25,21 @@ configure_logging()
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="QueueWatch API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    load_auth_settings()
+    rate_limit.load_limits()
+    load_allowed_origins()
+    yield
+
+
+app = FastAPI(
+    title="QueueWatch API",
+    version="0.1.0",
+    lifespan=lifespan,
+    dependencies=[Depends(rate_limit.enforce_rate_limit)],
+)
 
 app.add_exception_handler(HTTPException, problem_details_handler)
 
@@ -36,12 +56,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
-_cors_origins = settings.CORS_ALLOW_ORIGINS
+app.add_middleware(BodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[_cors_origins] if _cors_origins != "*" else ["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=load_allowed_origins(),
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=False,
 )
 
 app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])

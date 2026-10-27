@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     CELERY_TASK_ALWAYS_EAGER: bool = False
     FAILURE_RATE: float = 0.10
     MAX_RETRIES: int = 3
-    CORS_ALLOW_ORIGINS: str = "*"
 
 
 settings = Settings()

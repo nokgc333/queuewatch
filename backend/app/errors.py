@@ -15,6 +15,7 @@ async def problem_details_handler(request: Request, exc: Exception) -> JSONRespo
     return JSONResponse(
         status_code=exc.status_code,
         media_type="application/problem+json",
+        headers=exc.headers,
         content={
             "type": f"https://queuewatch.local/probs/{exc.status_code}",
             "title": exc.detail,

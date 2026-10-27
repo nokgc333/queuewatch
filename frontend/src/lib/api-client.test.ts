@@ -162,3 +162,49 @@ describe("ApiError fallback", () => {
     await expect(listJobs(BASE_URL)).rejects.toThrow("Request failed: 500");
   });
 });
+
+describe("認証トークン", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("トークンが無いときは、Authorization ヘッダを付けない", async () => {
+    mockFetchOnce(200, []);
+
+    await listJobs(BASE_URL);
+
+    expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/jobs`);
+  });
+
+  it("VITE_API_TOKEN があるときは、読み取りに Bearer ヘッダを付ける", async () => {
+    vi.stubEnv("VITE_API_TOKEN", "view-token-0001");
+    mockFetchOnce(200, []);
+
+    await listJobs(BASE_URL);
+
+    expect(fetch).toHaveBeenCalledWith(`${BASE_URL}/jobs`, {
+      headers: { Authorization: "Bearer view-token-0001" },
+    });
+  });
+
+  it("書き込みでは、Content-Type と Bearer の両方を送る", async () => {
+    vi.stubEnv("VITE_API_TOKEN", "edit-token-0002");
+    mockFetchOnce(201, { id: 1 });
+
+    await createJob(BASE_URL, { name: "JOB_A" });
+
+    expect(fetch).toHaveBeenCalledWith(
+      `${BASE_URL}/jobs`,
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer edit-token-0002" },
+      }),
+    );
+  });
+
+  it("401 のときは、案内つきのエラーにする", async () => {
+    mockFetchOnce(401, { title: "Authentication required" });
+
+    await expect(listJobs(BASE_URL)).rejects.toMatchObject({ status: 401 });
+  });
+});

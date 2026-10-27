@@ -1,0 +1,10 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.32,<1
+celery[redis]>=5.4,<6
+redis>=5.2,<6
+sqlalchemy>=2.0,<3
+alembic>=1.13,<2
+pydantic>=2.9,<3
+pydantic-settings>=2.5,<3
+python-json-logger>=3.2,<4
+prometheus-client>=0.21,<1
