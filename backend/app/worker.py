@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import worker_process_init
 
 from app.config import Settings, settings
+from app.tracing import setup_worker_tracing
 
 SIMULATED_HARD_LIMIT_SECONDS = 30
 SIMULATED_SOFT_LIMIT_SECONDS = 25
@@ -43,5 +45,11 @@ celery_app.conf.update(
     task_always_eager=settings.CELERY_TASK_ALWAYS_EAGER,
     task_eager_propagates=settings.CELERY_TASK_ALWAYS_EAGER,
 )
+
+
+@worker_process_init.connect  # type: ignore[untyped-decorator]
+def _start_worker_tracing(**_: object) -> None:
+    setup_worker_tracing()
+
 
 celery_app.autodiscover_tasks(["app"])

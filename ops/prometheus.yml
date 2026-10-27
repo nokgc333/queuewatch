@@ -1,0 +1,11 @@
+# Prometheus の設定の例。`token` モードでは、viewer のトークンを `bearer_token` に指定する。
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: queuewatch
+    metrics_path: /metrics
+    # authorization:
+    #   credentials: <viewer のトークン>
+    static_configs:
+      - targets: ["backend:8000"]
