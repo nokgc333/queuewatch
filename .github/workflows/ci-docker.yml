@@ -19,7 +19,7 @@ jobs:
         run: curl --fail --silent http://127.0.0.1:8000/healthz | grep -q '"redis":"ok"'
       - name: Redis is not published to the host
         run: |
-          if docker compose port redis 6379 | grep -q .; then
+          if docker compose ps redis --format '{{.Ports}}' | grep -q -- '->'; then
             echo "Redis must not be published by the default compose file"; exit 1
           fi
       - name: Redis refuses a client without the password
