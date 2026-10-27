@@ -10,17 +10,21 @@ export interface PollingState<T> {
   data: T | null;
   error: Error | null;
   isLoading: boolean;
+  /** すぐに取り直す(操作の直後に、画面を最新にするため)。 */
+  refresh: () => void;
 }
 
 export function usePolling<T>(
   fetcher: () => Promise<T>,
   intervalMs: number,
+  refreshKey: string | number = 0,
 ): PollingState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
+  const [manualTick, setManualTick] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,7 +52,7 @@ export function usePolling<T>(
       isMounted = false;
       clearInterval(timer);
     };
-  }, [intervalMs]);
+  }, [intervalMs, refreshKey, manualTick]);
 
-  return { data, error, isLoading };
+  return { data, error, isLoading, refresh: () => setManualTick((n) => n + 1) };
 }

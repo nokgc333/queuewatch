@@ -13,7 +13,7 @@ export interface DurationHistogramProps {
 
 export function DurationHistogram({ bins }: DurationHistogramProps): ReactElement {
   if (bins.length === 0 || bins.every((bin) => bin.count === 0)) {
-    return <p className="text-sm text-slate-400">まだ統計データがありません</p>;
+    return <p className="text-sm text-slate-600">まだ統計データがありません</p>;
   }
 
   return (

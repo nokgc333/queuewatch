@@ -20,11 +20,12 @@ export function JobBoard({
 }: JobBoardProps): ReactElement {
   const grouped = groupJobsByStatus(jobs);
   const doneJobs = [...grouped.success, ...grouped.dead];
+  const heldJobs = [...grouped.paused, ...grouped.cancelled];
 
   if (!isLoading && jobs.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-slate-300 py-16 text-center">
-        <p className="text-slate-500">まだジョブがありません</p>
+        <p className="text-slate-600">まだジョブがありません</p>
         {onCreateJob && (
           <button
             type="button"
@@ -73,6 +74,12 @@ export function JobBoard({
         <JobColumn
           title="完了"
           jobs={doneJobs}
+          isLoading={isLoading}
+          onJobClick={onJobClick}
+        />
+        <JobColumn
+          title="保留・中止"
+          jobs={heldJobs}
           isLoading={isLoading}
           onJobClick={onJobClick}
         />

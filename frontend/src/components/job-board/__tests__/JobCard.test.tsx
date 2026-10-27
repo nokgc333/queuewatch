@@ -46,4 +46,25 @@ describe("JobCard", () => {
 
     expect(screen.getByLabelText(/デッドレター/)).toBeInTheDocument();
   });
+
+  it("アクセシブルな名前は、見えている文字(優先度・状態・リトライ回数)を含む", () => {
+    render(
+      <JobCard
+        job={{
+          id: 1,
+          name: "SHOT010_render",
+          priority: "high",
+          status: "retrying",
+          retry_count: 2,
+          max_retries: 3,
+        }}
+      />,
+    );
+
+    const name = screen.getByRole("button").getAttribute("aria-label") ?? "";
+
+    for (const visible of ["SHOT010_render", "高", "リトライ中", "2 / 3"]) {
+      expect(name).toContain(visible);
+    }
+  });
 });

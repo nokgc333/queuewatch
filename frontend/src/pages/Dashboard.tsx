@@ -1,23 +1,41 @@
 /** SCR-001: ダッシュボード（ジョブボード + ワーカーパネル、仕様書§6.2）。 */
 import { useCallback, useState, type ReactElement } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "wouter";
 
 import { JobBoard } from "@/components/job-board/JobBoard";
+import { JobFilters, type JobFilterValue } from "@/components/job-board/JobFilters";
 import { NewJobModal } from "@/components/job-board/NewJobModal";
 import { WorkerStatusPanel } from "@/components/worker-panel/WorkerStatusPanel";
 import type { Priority } from "@/domain/job/priority";
-import { createJob, getWorkerStatus, listJobs } from "@/lib/api-client";
+import { createJob, getWorkerStatus, listJobsPage } from "@/lib/api-client";
 import { API_BASE_URL, POLLING_INTERVAL_MS } from "@/lib/config";
 import { usePolling } from "@/lib/polling";
 
+const PAGE_SIZE = 100;
+
 export function Dashboard(): ReactElement {
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const fetchJobs = useCallback(() => listJobs(API_BASE_URL), []);
+  const [filter, setFilter] = useState<JobFilterValue>({ q: "", priority: "" });
+  const [limit, setLimit] = useState(PAGE_SIZE);
+
+  const fetchJobs = useCallback(
+    () =>
+      listJobsPage(API_BASE_URL, {
+        q: filter.q.trim() || undefined,
+        priority: filter.priority || undefined,
+        limit,
+      }),
+    [filter, limit],
+  );
   const fetchWorkers = useCallback(() => getWorkerStatus(API_BASE_URL), []);
 
-  const jobsState = usePolling(fetchJobs, POLLING_INTERVAL_MS);
+  const jobsState = usePolling(
+    fetchJobs,
+    POLLING_INTERVAL_MS,
+    `${filter.q.trim()}|${filter.priority}|${limit}`,
+  );
   const workersState = usePolling(fetchWorkers, POLLING_INTERVAL_MS);
 
   const handleCreateJob = async (payload: { name: string; priority: Priority }): Promise<void> => {
@@ -26,7 +44,8 @@ export function Dashboard(): ReactElement {
   };
 
   const hasError = jobsState.error !== null || workersState.error !== null;
-  const jobs = jobsState.data ?? [];
+  const jobs = jobsState.data?.jobs ?? [];
+  const total = jobsState.data?.total ?? 0;
   const workers = workersState.data ?? [];
 
   return (
@@ -37,6 +56,13 @@ export function Dashboard(): ReactElement {
           最新データの取得に失敗しました。直近の表示を保持しています。
         </div>
       )}
+      <JobFilters
+        value={filter}
+        onChange={(next) => {
+          setFilter(next);
+          setLimit(PAGE_SIZE);
+        }}
+      />
       <div className="flex gap-4">
         <div className="flex-1">
           <JobBoard
@@ -48,6 +74,18 @@ export function Dashboard(): ReactElement {
         </div>
         <WorkerStatusPanel workers={workers} />
       </div>
+      <p className="text-sm text-slate-700" role="status" aria-live="polite">
+        {total}件中 {jobs.length}件を表示
+        {jobs.length < total && (
+          <button
+            type="button"
+            onClick={() => setLimit((current) => current + PAGE_SIZE)}
+            className="ml-3 rounded border border-slate-400 px-2 py-0.5 text-sm hover:bg-slate-50"
+          >
+            さらに表示
+          </button>
+        )}
+      </p>
       {isModalOpen && (
         <NewJobModal
           onSubmit={(payload) => {

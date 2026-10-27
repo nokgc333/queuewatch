@@ -13,7 +13,7 @@ export interface UtilizationChartProps {
 
 export function UtilizationChart({ stats }: UtilizationChartProps): ReactElement {
   if (stats.length === 0) {
-    return <p className="text-sm text-slate-400">まだ統計データがありません</p>;
+    return <p className="text-sm text-slate-600">まだ統計データがありません</p>;
   }
 
   return (

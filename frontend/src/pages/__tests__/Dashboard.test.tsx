@@ -1,6 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as apiClient from "@/lib/api-client";
@@ -13,24 +12,25 @@ afterEach(() => {
 
 function renderDashboard(): ReturnType<typeof render> {
   return render(
-    <MemoryRouter>
-      <Dashboard />
-    </MemoryRouter>,
+    <Dashboard />,
   );
 }
 
 describe("Dashboard", () => {
   it("ジョブとワーカー情報を取得して表示する", async () => {
-    vi.spyOn(apiClient, "listJobs").mockResolvedValue([
-      {
-        id: 1,
-        name: "SHOT010_render",
-        priority: "high",
-        status: "pending",
-        retry_count: 0,
-        max_retries: 3,
-      },
-    ]);
+    vi.spyOn(apiClient, "listJobsPage").mockResolvedValue({
+      jobs: [
+        {
+          id: 1,
+          name: "SHOT010_render",
+          priority: "high",
+          status: "pending",
+          retry_count: 0,
+          max_retries: 3,
+        },
+      ],
+      total: 1,
+    });
     vi.spyOn(apiClient, "getWorkerStatus").mockResolvedValue([
       { worker_name: "celery@w1", processed_count: 1, failed_count: 0, utilization: 0.4 },
     ]);
@@ -42,7 +42,7 @@ describe("Dashboard", () => {
   });
 
   it("ポーリング失敗時はエラーバナーを表示する", async () => {
-    vi.spyOn(apiClient, "listJobs").mockRejectedValue(new Error("network error"));
+    vi.spyOn(apiClient, "listJobsPage").mockRejectedValue(new Error("network error"));
     vi.spyOn(apiClient, "getWorkerStatus").mockResolvedValue([]);
 
     renderDashboard();
@@ -51,7 +51,7 @@ describe("Dashboard", () => {
   });
 
   it("新規ジョブボタンからモーダルを開きジョブを登録する", async () => {
-    vi.spyOn(apiClient, "listJobs").mockResolvedValue([]);
+    vi.spyOn(apiClient, "listJobsPage").mockResolvedValue({ jobs: [], total: 0 });
     vi.spyOn(apiClient, "getWorkerStatus").mockResolvedValue([]);
     const createJobSpy = vi.spyOn(apiClient, "createJob").mockResolvedValue({
       id: 2,
@@ -78,5 +78,54 @@ describe("Dashboard", () => {
     await user.click(screen.getByRole("button", { name: "登録" }));
 
     await vi.waitFor(() => expect(createJobSpy).toHaveBeenCalled());
+  });
+
+  it("検索すると、条件つきで取り直し、総件数を表示する", async () => {
+    const page = vi
+      .spyOn(apiClient, "listJobsPage")
+      .mockResolvedValue({ jobs: [], total: 0 });
+    vi.spyOn(apiClient, "getWorkerStatus").mockResolvedValue([]);
+    renderDashboard();
+    const user = userEvent.setup();
+
+    await user.type(await screen.findByLabelText("名前で検索"), "SHOT");
+
+    await waitFor(() => {
+      expect(page).toHaveBeenLastCalledWith(expect.any(String), {
+        q: "SHOT",
+        priority: undefined,
+        limit: 100,
+      });
+    });
+  });
+
+  it("総件数が表示より多いときは、さらに表示で、件数を増やして取り直す", async () => {
+    const page = vi.spyOn(apiClient, "listJobsPage").mockResolvedValue({
+      jobs: [
+        {
+          id: 1,
+          name: "J1",
+          priority: "normal",
+          status: "pending",
+          retry_count: 0,
+          max_retries: 3,
+        },
+      ],
+      total: 250,
+    });
+    vi.spyOn(apiClient, "getWorkerStatus").mockResolvedValue([]);
+    renderDashboard();
+    const user = userEvent.setup();
+
+    expect(await screen.findByText(/250件中 1件を表示/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "さらに表示" }));
+
+    await waitFor(() => {
+      expect(page).toHaveBeenLastCalledWith(expect.any(String), {
+        q: undefined,
+        priority: undefined,
+        limit: 200,
+      });
+    });
   });
 });

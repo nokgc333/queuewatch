@@ -40,7 +40,7 @@ export function JobColumn({
             />
           ))}
         {!isLoading && jobs.length === 0 && (
-          <p className="py-4 text-center text-xs text-slate-400">{emptyMessage}</p>
+          <p className="py-4 text-center text-xs text-slate-600">{emptyMessage}</p>
         )}
         {!isLoading &&
           jobs.map((job) => <JobCard key={job.id} job={job} onClick={onJobClick} />)}
