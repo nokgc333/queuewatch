@@ -6,7 +6,7 @@ const report = (scores: Record<string, number | null>) => ({
   categories: Object.fromEntries(Object.entries(scores).map(([k, v]) => [k, { score: v }])),
 });
 
-const PASSING = { performance: 0.9, accessibility: 1, "best-practices": 0.95, seo: 1 };
+const PASSING = { performance: 0.85, accessibility: 1, "best-practices": 0.95, seo: 1 };
 
 describe("findFailures", () => {
   it("returns nothing when every category meets its threshold exactly", () => {
