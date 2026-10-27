@@ -48,7 +48,20 @@ export interface ErrorBreakdownItemDto {
   count: number;
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+function withAuthorization(init?: RequestInit): RequestInit | undefined {
+  const token = import.meta.env.VITE_API_TOKEN;
+  if (!token) return init;
+  return {
+    ...init,
+    headers: {
+      ...(init?.headers as Record<string, string> | undefined),
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
+
+async function request<T>(url: string, requestInit?: RequestInit): Promise<T> {
+  const init = withAuthorization(requestInit);
   const response = init === undefined ? await fetch(url) : await fetch(url, init);
   if (!response.ok) {
     const problem = await response.json().catch(() => ({}));
