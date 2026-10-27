@@ -67,3 +67,12 @@ def test_every_queuewatch_variable_the_backend_reads_is_in_the_example_file() ->
     example = _read(".env.example")
 
     assert sorted(n for n in used if n not in example) == []
+
+
+def test_locations_do_not_declare_headers_because_that_would_drop_the_security_headers() -> None:
+    nginx = _read("frontend/nginx/default.conf.template")
+    locations = nginx.split("location ")[1:]
+
+    assert locations
+    for block in locations:
+        assert "add_header" not in block

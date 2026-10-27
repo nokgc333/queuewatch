@@ -11,13 +11,12 @@ server {
     add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
     location /assets/ {
-        add_header Cache-Control "public, max-age=31536000, immutable" always;
-        add_header Content-Security-Policy "default-src 'none'" always;
+        expires 1y;
         try_files $uri =404;
     }
 
     location / {
-        add_header Cache-Control "no-cache" always;
+        expires -1;
         try_files $uri /index.html;
     }
 }
