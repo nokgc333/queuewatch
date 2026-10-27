@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -69,9 +69,14 @@ app.add_middleware(
     expose_headers=["X-Total-Count"],
 )
 
-app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
-app.include_router(workers.router, prefix="/workers", tags=["workers"])
-app.include_router(stats.router, prefix="/stats", tags=["stats"])
+ROUTERS: list[tuple[APIRouter, str, str]] = [
+    (jobs.router, "/jobs", "jobs"),
+    (workers.router, "/workers", "workers"),
+    (stats.router, "/stats", "stats"),
+]
+
+for router, prefix, tag in ROUTERS:
+    app.include_router(router, prefix=prefix, tags=[tag])
 
 
 @app.get("/metrics", dependencies=[requires_viewer], include_in_schema=False)
