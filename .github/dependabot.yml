@@ -4,15 +4,34 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: pip
     directory: /scripts
     schedule:
       interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # The ESLint plugins the lint config relies on do not support ESLint 10 yet.
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      # React 19.3 adds 8.5 kB (gzip) to the initial JS and breaks the 68 kB bundle budget
+      # (64.9 kB -> 73.4 kB). Patch releases still come; lift this when the budget is revisited.
+      - dependency-name: react
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: react-dom
+        update-types: ["version-update:semver-minor"]
   - package-ecosystem: docker
     directory: /backend
     schedule:
@@ -21,6 +40,10 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+    ignore:
+      # The base image follows .nvmrc (Node 22), not the newest Node.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
