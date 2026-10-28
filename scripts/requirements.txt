@@ -3,7 +3,7 @@ requests>=2.34.2,<3
 # dev
 pytest>=9.0.3
 black>=26.10.1
-isort>=5.13
+isort>=9.0.2
 flake8>=7.4.1
 mypy>=1.11
 types-requests
