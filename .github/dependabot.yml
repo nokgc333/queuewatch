@@ -5,15 +5,19 @@ updates:
     schedule:
       interval: weekly
     groups:
-      minor-and-patch:
-        update-types: [minor, patch]
+      # One pull request per week for every Python update: the "update requirement" bumps
+      # raise a floor (CI already installs the latest), so they are safe to review together.
+      python-dependencies:
+        patterns: ["*"]
   - package-ecosystem: pip
     directory: /scripts
     schedule:
       interval: weekly
     groups:
-      minor-and-patch:
-        update-types: [minor, patch]
+      # One pull request per week for every Python update: the "update requirement" bumps
+      # raise a floor (CI already installs the latest), so they are safe to review together.
+      python-dependencies:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
