@@ -4,15 +4,28 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: pip
     directory: /scripts
     schedule:
       interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # The ESLint plugins the lint config relies on do not support ESLint 10 yet.
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /backend
     schedule:
@@ -21,6 +34,10 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+    ignore:
+      # The base image follows .nvmrc (Node 22), not the newest Node.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
