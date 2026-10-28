@@ -15,7 +15,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL VITE_API_TOKEN=$VITE_API_TOKEN
 COPY . .
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS production
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS production
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --chmod=755 nginx/40-write-config.sh /docker-entrypoint.d/40-write-config.sh
 COPY --from=build /app/dist /usr/share/nginx/html
