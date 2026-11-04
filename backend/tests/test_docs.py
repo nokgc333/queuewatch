@@ -18,7 +18,7 @@ def test_every_adr_is_listed_in_the_readme_and_there_are_at_least_nine() -> None
 
 
 def test_the_readme_images_exist() -> None:
-    images = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", README)
+    images = re.findall(r"!\[[^\]]*\]\((?!https?://)([^)]+)\)", README)
 
     assert len(images) >= 4
     for image in images:
