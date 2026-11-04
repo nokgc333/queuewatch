@@ -1,5 +1,7 @@
 # QueueWatch
 
+[![CI Backend](https://github.com/nokgc333/queuewatch/actions/workflows/ci-backend.yml/badge.svg)](https://github.com/nokgc333/queuewatch/actions/workflows/ci-backend.yml) [![CI Frontend](https://github.com/nokgc333/queuewatch/actions/workflows/ci-frontend.yml/badge.svg)](https://github.com/nokgc333/queuewatch/actions/workflows/ci-frontend.yml)
+
 Celery + Redisで動く分散レンダーファーム風のジョブキュー監視ダッシュボード。優先度別キューイング・自動リトライ（指数バックオフ）・デッドレターキューを、実際に動くコードで証明するプロジェクトです。
 
 **疑似と実の両方で動きます**。既定は疑似レンダー(`time.sleep()` と確率的な失敗で、キューイング → ワーカー処理 → リトライ → デッドレターを再現性高く実演、[ADR-0002](docs/adr/0002-simulated-render-farm.md))。`RENDERER=blender` にすると、実際に Blender をコマンドラインで動かして、フレームを出力します([ADR-0007](docs/adr/0007-renderer-port-and-blender.md)、Blender 3.6.0 / 4.0.0 / 4.5.3 / 5.0.0 で実機検証済み、[記録](docs/verification/README.md))。CI は疑似で通ります。
@@ -14,13 +16,21 @@ CGパイプライン開発では、レンダーファームのジョブキュー
 
 ## 画面
 
-| ダッシュボード | ジョブ詳細 |
-| --- | --- |
-| ![ダッシュボード](docs/images/dashboard.png) | ![ジョブ詳細](docs/images/job-detail.png) |
+ダッシュボード:
 
-| 統計 | デッドレター(再投入) |
-| --- | --- |
-| ![統計](docs/images/stats.png) | ![デッドレター](docs/images/dead-letter.png) |
+![ダッシュボード](docs/images/dashboard.png)
+
+ジョブ詳細:
+
+![ジョブ詳細](docs/images/job-detail.png)
+
+統計:
+
+![統計](docs/images/stats.png)
+
+デッドレター(再投入):
+
+![デッドレター](docs/images/dead-letter.png)
 
 ## アーキテクチャ
 
@@ -152,27 +162,23 @@ Celery統合テストは`CELERY_TASK_ALWAYS_EAGER=true`環境変数によりワ�
 
 ## ドキュメント
 
-| 文書 | 内容 |
-| --- | --- |
-| [docs/operations.md](docs/operations.md) | 起動・状態の確認・障害対応・キューの滞留・シャットダウン・バックアップ・復旧 |
-| [docs/api.md](docs/api.md) | API一覧（実際のAPIから生成し、テストで一致を保証） |
-| [docs/verification/](docs/verification/README.md) | 実 Blender の検証記録（版ごと） |
-| [CHANGELOG.md](CHANGELOG.md) | 変更履歴（0.2.0） |
+- **[docs/operations.md](docs/operations.md):** 起動・状態の確認・障害対応・キューの滞留・シャットダウン・バックアップ・復旧
+- **[docs/api.md](docs/api.md):** API一覧（実際のAPIから生成し、テストで一致を保証）
+- **[docs/verification/](docs/verification/README.md):** 実 Blender の検証記録（版ごと）
+- **[CHANGELOG.md](CHANGELOG.md):** 変更履歴（0.2.0）
 
 ## 設計判断(ADR)
 
-| 番号 | 内容 |
-| --- | --- |
-| [0001](docs/adr/0001-celery-and-redis.md) | ADR-0001: Celery + Redisを分散タスクキュー基盤として採用 |
-| [0002](docs/adr/0002-simulated-render-farm.md) | ADR-0002: 疑似レンダーファーム（実レンダリングを行わないシミュレーション処理）の採用 |
-| [0003](docs/adr/0003-sqlite-as-primary-db.md) | ADR-0003: SQLiteをv1の正本DBとして採用（ジョブメタデータ・統計集計を含む） |
-| [0004](docs/adr/0004-fixed-priority-queues.md) | ADR-0004: 優先度キューを3段階固定とし動的変更は非対応とする設計判断 |
-| [0005](docs/adr/0005-polling-over-websocket.md) | ADR-0005: WebSocketではなくポーリングによる疑似リアルタイム表示を採用 |
-| [0006](docs/adr/0006-vite-over-nextjs.md) | ADR-0006: フロントエンドにNext.jsではなくViteを採用（SSR不要な管理画面用途） |
-| [0007](docs/adr/0007-renderer-port-and-blender.md) | ADR-0007: レンダラーをポートにして、疑似と実 Blender を切り替える(ADR-0002 を置き換える) |
-| [0008](docs/adr/0008-token-auth-and-safe-container-defaults.md) | ADR-0008: トークン認証と、安全な既定のコンテナ構成 |
-| [0009](docs/adr/0009-observability.md) | ADR-0009: 観測性は、JSON ログ・Prometheus・OpenTelemetry で揃える |
-| [0010](docs/adr/0010-job-controls.md) | ADR-0010: ジョブの操作(キャンセル・一時停止・再開・再投入) |
+- **[0001](docs/adr/0001-celery-and-redis.md):** ADR-0001: Celery + Redisを分散タスクキュー基盤として採用
+- **[0002](docs/adr/0002-simulated-render-farm.md):** ADR-0002: 疑似レンダーファーム（実レンダリングを行わないシミュレーション処理）の採用
+- **[0003](docs/adr/0003-sqlite-as-primary-db.md):** ADR-0003: SQLiteをv1の正本DBとして採用（ジョブメタデータ・統計集計を含む）
+- **[0004](docs/adr/0004-fixed-priority-queues.md):** ADR-0004: 優先度キューを3段階固定とし動的変更は非対応とする設計判断
+- **[0005](docs/adr/0005-polling-over-websocket.md):** ADR-0005: WebSocketではなくポーリングによる疑似リアルタイム表示を採用
+- **[0006](docs/adr/0006-vite-over-nextjs.md):** ADR-0006: フロントエンドにNext.jsではなくViteを採用（SSR不要な管理画面用途）
+- **[0007](docs/adr/0007-renderer-port-and-blender.md):** ADR-0007: レンダラーをポートにして、疑似と実 Blender を切り替える(ADR-0002 を置き換える)
+- **[0008](docs/adr/0008-token-auth-and-safe-container-defaults.md):** ADR-0008: トークン認証と、安全な既定のコンテナ構成
+- **[0009](docs/adr/0009-observability.md):** ADR-0009: 観測性は、JSON ログ・Prometheus・OpenTelemetry で揃える
+- **[0010](docs/adr/0010-job-controls.md):** ADR-0010: ジョブの操作(キャンセル・一時停止・再開・再投入)
 
 ## 既知の制限事項
 
